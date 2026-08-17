@@ -1,0 +1,1583 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a1612">
+  <title>SQL-тренажёр: OVER · PARTITION BY · LAG · LEAD</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box}
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{
+      margin:0;min-height:100vh;min-height:100dvh;
+      font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 0%, rgba(22,101,52,.35) 0%, transparent 55%),
+        radial-gradient(ellipse 70% 50% at 90% 100%, rgba(21,128,61,.2) 0%, transparent 50%),
+        #0a1612;
+      color:#e2e8f0;
+      display:flex;flex-direction:column;
+      padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));
+    }
+    .app{flex:1;display:flex;flex-direction:column;max-width:1200px;width:100%;margin:0 auto;min-height:0;gap:10px}
+
+    .header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .brand{display:flex;align-items:center;gap:10px}
+    .brand-icon{
+      width:36px;height:36px;border-radius:10px;
+      background:linear-gradient(135deg,#14532d 0%,#166534 100%);
+      border:1px solid rgba(74,222,128,.25);
+      box-shadow:0 4px 16px rgba(22,101,52,.4);
+      display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;
+    }
+    .brand h1{margin:0;font-size:1.05rem;font-weight:600;color:#f8fafc}
+    .brand span{font-size:.78rem;color:#94a3b8;display:block;margin-top:1px}
+    .progress-pill{
+      font-size:.78rem;padding:6px 12px;border-radius:999px;
+      background:rgba(15,40,30,.55);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+      border:1px solid rgba(74,222,128,.18);color:#cbd5e1;white-space:nowrap;
+    }
+    .progress-pill b{color:#4ade80}
+
+    .task-card{
+      background:rgba(15,40,30,.45);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+      border:1px solid rgba(74,222,128,.15);border-radius:14px;padding:14px 16px;
+      box-shadow:0 8px 32px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .task-card.success{border-color:rgba(74,222,128,.45);background:linear-gradient(135deg,rgba(20,83,45,.55) 0%,rgba(15,40,30,.5) 100%)}
+    .task-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:6px;font-weight:600}
+    .task-card.success .task-label{color:#86efac}
+    .task-text{margin:0;font-size:.95rem;line-height:1.55;color:#e2e8f0}
+    .task-text b{color:#6ee7b7;font-weight:600}
+    .task-text code{
+      display:block;margin-top:8px;padding:10px 12px;border-radius:8px;
+      background:rgba(8,18,14,.65);border:1px solid rgba(74,222,128,.12);
+      font-family:"Cascadia Code","Fira Code",Consolas,monospace;font-size:12px;color:#a7f3d0;line-height:1.5;white-space:pre-wrap;
+    }
+
+    .workspace{
+      flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px;min-height:0;
+    }
+    @media(max-width:860px){.workspace{grid-template-columns:1fr;grid-template-rows:auto auto}}
+
+    .panel{
+      display:flex;flex-direction:column;min-height:0;
+      background:rgba(15,40,30,.4);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+      border:1px solid rgba(74,222,128,.12);border-radius:14px;overflow:hidden;
+      box-shadow:0 8px 32px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .panel-head{
+      display:flex;align-items:center;justify-content:space-between;gap:8px;
+      padding:8px 12px;background:rgba(10,22,18,.6);border-bottom:1px solid rgba(74,222,128,.1);flex-shrink:0;
+    }
+    .panel-title{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;display:flex;align-items:center;gap:6px}
+    .panel-dot{width:8px;height:8px;border-radius:50%}
+    .dot-editor{background:#22c55e}.dot-output{background:#fbbf24}.dot-schema{background:#34d399}
+
+    .editor-wrap{flex:1;display:flex;min-height:220px;position:relative;overflow:hidden}
+    .line-nums{
+      padding:12px 0 12px 10px;font-family:"Cascadia Code","Fira Code","JetBrains Mono",Consolas,monospace;
+      font-size:13px;line-height:1.55;color:#475569;text-align:right;user-select:none;min-width:36px;flex-shrink:0;
+      background:rgba(8,18,14,.7);border-right:1px solid rgba(74,222,128,.08);overflow:hidden;
+      white-space:pre;
+    }
+    .sql-input{
+      flex:1;resize:none;border:none;outline:none;
+      padding:12px 14px;margin:0;
+      font-family:"Cascadia Code","Fira Code","JetBrains Mono",Consolas,monospace;
+      font-size:13px;line-height:1.55;
+      background:rgba(8,18,14,.7);color:#e2e8f0;tab-size:2;min-height:220px;
+    }
+    .sql-input::placeholder{color:#475569}
+
+    .toolbar{
+      display:flex;align-items:center;gap:8px;padding:8px 12px;
+      border-top:1px solid rgba(74,222,128,.1);background:rgba(10,22,18,.6);flex-shrink:0;flex-wrap:wrap;
+    }
+    .btn-run{
+      display:inline-flex;align-items:center;gap:6px;
+      padding:8px 18px;border:none;border-radius:8px;cursor:pointer;
+      font-family:inherit;font-size:.88rem;font-weight:600;
+      background:linear-gradient(135deg,#14532d 0%,#166534 100%);
+      color:#fff;box-shadow:0 2px 12px rgba(22,101,52,.45);
+      border:1px solid rgba(74,222,128,.2);
+      transition:transform .15s,box-shadow .15s;
+    }
+    .btn-run:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(22,101,52,.55)}
+    .btn-run:active{transform:translateY(0)}
+    .btn-secondary{
+      padding:7px 14px;border:1px solid rgba(74,222,128,.2);border-radius:8px;
+      background:rgba(15,40,30,.4);color:#94a3b8;font-family:inherit;font-size:.82rem;cursor:pointer;
+    }
+    .btn-secondary:hover{border-color:rgba(74,222,128,.35);color:#cbd5e1}
+    .hint-kbd{font-size:.75rem;color:#64748b;margin-left:auto}
+
+    .output-body,.schema-body{
+      flex:1;overflow:auto;padding:12px 14px;font-size:.88rem;line-height:1.5;min-height:120px;
+      -webkit-overflow-scrolling:touch;
+    }
+    .output-body{font-family:"Cascadia Code","Fira Code",Consolas,monospace;font-size:12.5px}
+    .output-empty{color:#64748b;font-style:italic;font-family:"Segoe UI",system-ui,sans-serif}
+    .msg{margin:0 0 8px;padding:8px 10px;border-radius:8px;border-left:3px solid}
+    .msg-ok{background:rgba(5,46,22,.6);border-color:#22c55e;color:#bbf7d0}
+    .msg-err{background:rgba(69,10,10,.6);border-color:#ef4444;color:#fecaca}
+    .msg-info{background:rgba(20,83,45,.45);border-color:#4ade80;color:#bbf7d0}
+
+    .schema-table{margin-bottom:12px;border:1px solid rgba(74,222,128,.12);border-radius:8px;overflow:hidden}
+    .schema-table-name{
+      padding:6px 10px;background:rgba(10,22,18,.6);font-weight:600;font-size:.82rem;color:#6ee7b7;
+      border-bottom:1px solid rgba(74,222,128,.1);
+    }
+    .schema-cols{padding:0;margin:0;list-style:none}
+    .schema-cols li{
+      padding:5px 10px;font-family:Consolas,monospace;font-size:12px;
+      border-bottom:1px solid rgba(74,222,128,.06);display:flex;gap:8px;align-items:baseline;
+    }
+    .schema-cols li:last-child{border-bottom:none}
+    .col-name{color:#e2e8f0}.col-type{color:#86efac;font-size:11px}
+    .col-pk{font-size:10px;background:rgba(20,83,45,.6);color:#fcd34d;padding:1px 5px;border-radius:4px}
+    .data-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+    .data-table th,.data-table td{padding:5px 8px;border:1px solid rgba(74,222,128,.1);text-align:left;font-family:Consolas,monospace}
+    .data-table th{background:rgba(10,22,18,.6);color:#86efac;font-weight:600;font-size:11px}
+    .data-table td{color:#cbd5e1}
+    .data-empty{padding:8px 10px;font-size:12px;color:#64748b;font-style:italic}
+
+    .bottom-row{display:grid;grid-template-columns:1fr;gap:10px}
+    @media(min-width:861px){.bottom-row{grid-column:1/-1}}
+
+    .toast{
+      position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+      z-index:100;padding:12px 20px;border-radius:10px;font-size:.88rem;
+      background:rgba(15,40,30,.75);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+      border:1px solid rgba(74,222,128,.2);color:#e2e8f0;
+      box-shadow:0 8px 32px rgba(0,0,0,.4);
+      opacity:0;visibility:hidden;transition:.25s;pointer-events:none;max-width:min(92vw,420px);text-align:center;
+    }
+    .toast.visible{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+
+    .modal-overlay{
+      position:fixed;inset:0;background:rgba(10,22,18,.7);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+      z-index:200;display:none;align-items:center;justify-content:center;padding:16px;
+    }
+    .modal-overlay.visible{display:flex}
+    .modal{
+      background:rgba(15,40,30,.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+      border:1px solid rgba(74,222,128,.2);border-radius:16px;
+      max-width:440px;width:100%;padding:28px 24px;text-align:center;
+      box-shadow:0 20px 60px rgba(0,0,0,.5);
+    }
+    .modal-icon{font-size:48px;margin-bottom:12px}
+    .modal h2{margin:0 0 8px;font-size:1.25rem;color:#f8fafc}
+    .modal p{margin:0 0 20px;color:#94a3b8;font-size:.92rem;line-height:1.5}
+    .modal button{
+      padding:10px 24px;border:none;border-radius:8px;cursor:pointer;
+      font-family:inherit;font-size:.9rem;font-weight:600;
+      background:linear-gradient(135deg,#14532d 0%,#166534 100%);color:#fff;
+      border:1px solid rgba(74,222,128,.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <div class="brand-icon">SQL</div>
+        <div>
+          <h1>Тренажёр SQL</h1>
+          <span>OVER · PARTITION BY · LAG · LEAD</span>
+        </div>
+      </div>
+      <div class="progress-pill" id="progressPill">Задание <b id="taskNum">1</b> из <b id="taskTotal">5</b></div>
+    </header>
+
+    <section class="task-card" id="taskCard">
+      <div class="task-label" id="taskLabel">Задание 1</div>
+      <p class="task-text" id="taskText"></p>
+    </section>
+
+    <div class="workspace">
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="panel-dot dot-editor"></span>Редактор SQL</span>
+        </div>
+        <div class="editor-wrap">
+          <div class="line-nums" id="lineNums">1</div>
+          <textarea class="sql-input" id="sqlInput" spellcheck="false" placeholder="Напишите SQL-запрос…"></textarea>
+        </div>
+        <div class="toolbar">
+          <button type="button" class="btn-run" id="btnRun">▶ Выполнить</button>
+          <button type="button" class="btn-secondary" id="btnReset">Очистить</button>
+          <span class="hint-kbd">Ctrl + Enter</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="panel-dot dot-output"></span>Результат выполнения</span>
+        </div>
+        <div class="output-body" id="outputBody">
+          <p class="output-empty">Нажмите «Выполнить», чтобы запустить запрос и увидеть результат проверки.</p>
+        </div>
+      </div>
+
+      <div class="panel bottom-row">
+        <div class="panel-head">
+          <span class="panel-title"><span class="panel-dot dot-schema"></span>Схема базы данных</span>
+        </div>
+        <div class="schema-body" id="schemaBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <div class="modal-overlay" id="modalComplete">
+    <div class="modal">
+      <div class="modal-icon">🎉</div>
+      <h2>Отлично!</h2>
+      <p>Вы освоили оконные функции: OVER, PARTITION BY, LAG и LEAD.</p>
+      <button type="button" id="btnRestart">Пройти заново</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const sqlInput = document.getElementById('sqlInput');
+  const lineNums = document.getElementById('lineNums');
+  const outputBody = document.getElementById('outputBody');
+  const schemaBody = document.getElementById('schemaBody');
+  const taskCard = document.getElementById('taskCard');
+  const taskLabel = document.getElementById('taskLabel');
+  const taskText = document.getElementById('taskText');
+  const taskNum = document.getElementById('taskNum');
+  const taskTotal = document.getElementById('taskTotal');
+  const btnRun = document.getElementById('btnRun');
+  const btnReset = document.getElementById('btnReset');
+  const toast = document.getElementById('toast');
+  const modalComplete = document.getElementById('modalComplete');
+  const btnRestart = document.getElementById('btnRestart');
+
+  let taskStep = 0;
+  let db = { tables: {} };
+  let toastTimer = null;
+
+  function cloneDb(src){
+    const tables = {};
+    for (const name of Object.keys(src.tables)) {
+      const t = src.tables[name];
+      tables[name] = {
+        columns: t.columns.map(c => ({ ...c })),
+        rows: (t.rows || []).map(r => ({ ...r }))
+      };
+    }
+    return { tables };
+  }
+
+  function normalizeSql(sql){
+    return sql.replace(/\s+/g, ' ').trim();
+  }
+
+  function stripComments(sql){
+    return sql.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
+  }
+
+  function splitByComma(str){
+    const parts = [];
+    let cur = '';
+    let inQuote = false;
+    let depth = 0;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === "'" && !inQuote) { inQuote = true; cur += ch; continue; }
+      if (ch === "'" && inQuote) {
+        if (str[i + 1] === "'") { cur += "''"; i++; continue; }
+        inQuote = false; cur += ch; continue;
+      }
+      if (!inQuote) {
+        if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+        else if (ch === ',' && depth === 0) { parts.push(cur.trim()); cur = ''; continue; }
+      }
+      cur += ch;
+    }
+    if (cur.trim()) parts.push(cur.trim());
+    return parts;
+  }
+
+  function parseSelectItem(item){
+    item = item.trim();
+    const asMatch = item.match(/^(.+?)\s+AS\s+["`]?(\w+)["`]?$/i);
+    let expr = item, alias = null;
+    if (asMatch) {
+      expr = asMatch[1].trim();
+      alias = asMatch[2].toLowerCase();
+    } else {
+      const bare = expr.replace(/["`]/g, '');
+      if (/^[\w.]+$/.test(bare)) alias = bare.includes('.') ? bare.split('.').pop().toLowerCase() : bare.toLowerCase();
+    }
+    return { expr, alias };
+  }
+
+  function parseOrderBy(str){
+    const items = [];
+    for (const part of str.split(',')) {
+      const m = part.trim().match(/^["`]?(\w+)["`]?(?:\s+(ASC|DESC))?$/i);
+      if (!m) return null;
+      items.push({ col: m[1].toLowerCase(), dir: (m[2] || 'ASC').toUpperCase() });
+    }
+    return items.length ? items : null;
+  }
+
+  function parseTableRef(str){
+    const m = str.trim().match(/^["`]?(\w+)["`]?(?:\s+(?:AS\s+)?["`]?(\w+)["`]?)?$/i);
+    if (!m) return null;
+    const name = m[1].toLowerCase();
+    const alias = (m[2] || m[1]).toLowerCase();
+    return { name, alias };
+  }
+
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const SYSDATE_VAL = new Date(2024, 7, 13, 15, 30, 45);
+
+  function splitArgs(inner){
+    const args = [];
+    let cur = '', depth = 0, inQuote = false;
+    for (let i = 0; i < inner.length; i++) {
+      const ch = inner[i];
+      if (ch === "'" && !inQuote) { inQuote = true; cur += ch; continue; }
+      if (ch === "'" && inQuote) {
+        if (inner[i + 1] === "'") { cur += "''"; i++; continue; }
+        inQuote = false; cur += ch; continue;
+      }
+      if (!inQuote) {
+        if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+        else if (ch === ',' && depth === 0) { args.push(cur.trim()); cur = ''; continue; }
+      }
+      cur += ch;
+    }
+    if (cur.trim()) args.push(cur.trim());
+    return args;
+  }
+
+  function extractCall(expr){
+    const m = expr.match(/^(\w+)\s*\(/i);
+    if (!m) return null;
+    let depth = 0, start = expr.indexOf('(');
+    for (let i = start; i < expr.length; i++) {
+      if (expr[i] === '(') depth++;
+      else if (expr[i] === ')') {
+        depth--;
+        if (depth === 0) {
+          if (expr.slice(i + 1).trim()) return null;
+          const inner = expr.slice(start + 1, i);
+          return { name: m[1].toUpperCase(), args: splitArgs(inner) };
+        }
+      }
+    }
+    return null;
+  }
+
+  function unquoteStr(s){
+    s = s.trim();
+    if (s.startsWith("'") && s.endsWith("'")) return s.slice(1, -1).replace(/''/g, "'");
+    return s;
+  }
+
+  function parseNlsNumeric(nlsStr){
+    const m = nlsStr.match(/NLS_NUMERIC_CHARACTERS\s*=\s*'([^']*)'/i);
+    const chars = m ? m[1] : '.,';
+    return { decimal: chars[0] || '.', group: chars[1] || ',' };
+  }
+
+  function oracleToDate(str, mask){
+    str = unquoteStr(String(str));
+    mask = unquoteStr(mask);
+    let si = 0, mi = 0;
+    let y, mo, d, h = 0, miTime = 0, s = 0;
+    while (mi < mask.length) {
+      const rem = mask.slice(mi);
+      if (rem.startsWith('YYYY')) {
+        y = parseInt(str.slice(si, si + 4), 10); si += 4; mi += 4;
+      } else if (rem.startsWith('HH24')) {
+        h = parseInt(str.slice(si, si + 2), 10); si += 2; mi += 4;
+      } else if (rem.startsWith('DD')) {
+        d = parseInt(str.slice(si, si + 2), 10); si += 2; mi += 2;
+      } else if (rem.startsWith('MM')) {
+        mo = parseInt(str.slice(si, si + 2), 10); si += 2; mi += 2;
+      } else if (rem.startsWith('MI')) {
+        miTime = parseInt(str.slice(si, si + 2), 10); si += 2; mi += 2;
+      } else if (rem.startsWith('SS')) {
+        s = parseInt(str.slice(si, si + 2), 10); si += 2; mi += 2;
+      } else if (str[si] === mask[mi]) {
+        si++; mi++;
+      } else {
+        mi++;
+      }
+    }
+    return new Date(y, mo - 1, d, h, miTime, s);
+  }
+
+  function looksLikeDate(val){
+    if (val instanceof Date) return true;
+    return typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val);
+  }
+
+  function asDate(val){
+    if (val instanceof Date) return val;
+    if (val == null) return null;
+    const s = String(val);
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2}):(\d{2}))?/);
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+    return oracleToDate(s, 'YYYY-MM-DD');
+  }
+
+  function pad2(n){ return n < 10 ? '0' + n : String(n); }
+
+  function oracleToChar(val, mask){
+    let fm = false;
+    mask = unquoteStr(mask);
+    if (mask.startsWith('FM')) { fm = true; mask = mask.slice(2); }
+    mask = mask;
+    if (typeof val === 'number') {
+      let pattern = mask.replace(/B/g, '');
+      const hasSign = pattern.includes('S');
+      pattern = pattern.replace(/S/g, '');
+      const decIdx = pattern.indexOf('D');
+      let intPart = pattern, decPart = '';
+      if (decIdx >= 0) { intPart = pattern.slice(0, decIdx); decPart = pattern.slice(decIdx + 1); }
+      const intWidth = (intPart.match(/9/g) || []).length + (intPart.match(/0/g) || []).length;
+      const decWidth = (decPart.match(/9/g) || []).length + (decPart.match(/0/g) || []).length;
+      let num = Math.abs(val);
+      let intStr = decWidth ? String(Math.floor(num)) : String(Math.round(num));
+      let decStr = '';
+      if (decWidth) {
+        decStr = String(Math.round((num - Math.floor(num)) * Math.pow(10, decWidth))).padStart(decWidth, '0');
+      }
+      if (!fm) intStr = intStr.padStart(intWidth, ' ');
+      else intStr = intStr;
+      let out = intStr;
+      if (decWidth) out += '.' + decStr;
+      if (hasSign && val < 0) out = '-' + out;
+      return out;
+    }
+    const dt = asDate(val);
+    if (!dt || isNaN(dt.getTime())) return null;
+    let out = '';
+    let i = 0;
+    while (i < mask.length) {
+      if (mask.startsWith('YYYY', i)) { out += dt.getFullYear(); i += 4; }
+      else if (mask.startsWith('HH24', i)) { out += pad2(dt.getHours()); i += 4; }
+      else if (mask.startsWith('DD', i)) { out += pad2(dt.getDate()); i += 2; }
+      else if (mask.startsWith('MM', i)) { out += pad2(dt.getMonth() + 1); i += 2; }
+      else if (mask.startsWith('MI', i)) { out += pad2(dt.getMinutes()); i += 2; }
+      else if (mask.startsWith('SS', i)) { out += pad2(dt.getSeconds()); i += 2; }
+      else if (mask.startsWith('Mon', i)) { out += MONTHS[dt.getMonth()]; i += 3; }
+      else { out += mask[i]; i++; }
+    }
+    return out;
+  }
+
+  function oracleToNumber(str, mask, nlsStr){
+    str = unquoteStr(String(str));
+    mask = unquoteStr(mask).toUpperCase();
+    const nls = parseNlsNumeric(nlsStr || '');
+    let s = str;
+    if (nls.group && nls.group !== ' ') s = s.split(nls.group).join('');
+    if (nls.decimal !== '.') s = s.replace(nls.decimal, '.');
+    s = s.replace(/[^\d.\-+]/g, '');
+    const n = parseFloat(s);
+    return isNaN(n) ? null : n;
+  }
+
+  function splitConcat(expr){
+    const parts = [];
+    let cur = '', depth = 0, inQuote = false;
+    for (let i = 0; i < expr.length; i++) {
+      const ch = expr[i];
+      if (ch === "'" && !inQuote) { inQuote = true; cur += ch; continue; }
+      if (ch === "'" && inQuote) {
+        if (expr[i + 1] === "'") { cur += "''"; i++; continue; }
+        inQuote = false; cur += ch; continue;
+      }
+      if (!inQuote && ch === '|' && expr[i + 1] === '|') {
+        parts.push(cur.trim()); cur = ''; i++; continue;
+      }
+      if (!inQuote) {
+        if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+      }
+      cur += ch;
+    }
+    if (cur.trim()) parts.push(cur.trim());
+    return parts.length ? parts : [expr];
+  }
+
+  function splitByAnd(str){
+    const parts = [];
+    let cur = '', inQuote = false;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === "'" && !inQuote) { inQuote = true; cur += ch; continue; }
+      if (ch === "'" && inQuote) {
+        if (str[i + 1] === "'") { cur += "''"; i++; continue; }
+        inQuote = false; cur += ch; continue;
+      }
+      if (!inQuote && str.slice(i, i + 3).toUpperCase() === 'AND' &&
+          (i === 0 || /\s/.test(str[i - 1])) &&
+          (i + 3 >= str.length || /\s/.test(str[i + 3]))) {
+        parts.push(cur.trim()); cur = ''; i += 2; continue;
+      }
+      cur += ch;
+    }
+    if (cur.trim()) parts.push(cur.trim());
+    return parts.length ? parts : [str];
+  }
+
+  function evalCondition(cond, row, ctx){
+    return splitByAnd(cond).every(part => {
+      part = part.trim();
+      let m = part.match(/^(.+?)\s+IS\s+NOT\s+NULL$/i);
+      if (m) return evalExpr(m[1], row, ctx) != null;
+      m = part.match(/^(.+?)\s+IS\s+NULL$/i);
+      if (m) return evalExpr(m[1], row, ctx) == null;
+      const c = parseWhereCond(part.trim());
+      if (!c) throw new Error('Не удалось разобрать условие: ' + part);
+      const lv = evalExpr(c.left, row, ctx);
+      const rv = evalExpr(c.right, row, ctx);
+      return compareVals(lv, rv, c.op);
+    });
+  }
+
+  function parseCaseInner(inner){
+    const whenThen = [];
+    let elseExpr = null;
+    const elseMatch = inner.match(/\bELSE\s+(.+)$/is);
+    const body = elseMatch ? inner.slice(0, elseMatch.index).trim() : inner.trim();
+    if (elseMatch) elseExpr = elseMatch[1].trim();
+    const re = /\bWHEN\s+(.+?)\s+THEN\s+(.+?)(?=\s+WHEN\s+|\s+ELSE\s+|$)/gis;
+    let match;
+    while ((match = re.exec(body)) !== null) {
+      whenThen.push({ when: match[1].trim(), then: match[2].trim() });
+    }
+    return { whenThen, elseExpr };
+  }
+
+  function evalCase(expr, row, ctx){
+    const m = expr.match(/^CASE\s+(.*)\s+END$/is);
+    if (!m) throw new Error('Неверное выражение CASE.');
+    const { whenThen, elseExpr } = parseCaseInner(m[1].trim());
+    for (const wt of whenThen) {
+      if (evalCondition(wt.when, row, ctx)) return evalExpr(wt.then, row, ctx);
+    }
+    if (elseExpr != null) return evalExpr(elseExpr, row, ctx);
+    return null;
+  }
+
+  function evalDecode(args){
+    if (!args.length) return null;
+    const val = args[0];
+    const rest = args.slice(1);
+    for (let i = 0; i + 1 < rest.length; i += 2) {
+      if (rest.length % 2 === 1 && i + 2 === rest.length) break;
+      if (sameVal(val, rest[i])) return rest[i + 1];
+    }
+    if (rest.length % 2 === 1) return rest[rest.length - 1];
+    return null;
+  }
+
+  function isWordChar(ch){
+    return /[A-Za-z0-9_]/.test(ch);
+  }
+
+  function findMatchingParen(str, openIdx){
+    let depth = 0, inQuote = false;
+    for (let i = openIdx; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === "'" && !inQuote) { inQuote = true; continue; }
+      if (ch === "'" && inQuote) {
+        if (str[i + 1] === "'") { i++; continue; }
+        inQuote = false; continue;
+      }
+      if (inQuote) continue;
+      if (ch === '(') depth++;
+      else if (ch === ')') {
+        depth--;
+        if (depth === 0) return i;
+      }
+    }
+    return -1;
+  }
+
+  function findKeyword(str, kw){
+    const up = kw.toUpperCase();
+    let depth = 0, inQuote = false;
+    for (let i = 0; i <= str.length - kw.length; i++) {
+      const ch = str[i];
+      if (ch === "'" && !inQuote) { inQuote = true; continue; }
+      if (ch === "'" && inQuote) {
+        if (str[i + 1] === "'") { i++; continue; }
+        inQuote = false; continue;
+      }
+      if (inQuote) continue;
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      if (depth !== 0) continue;
+      if (str.slice(i, i + kw.length).toUpperCase() !== up) continue;
+      if (i > 0 && isWordChar(str[i - 1])) continue;
+      const after = str[i + kw.length];
+      if (after && isWordChar(after)) continue;
+      return i;
+    }
+    return -1;
+  }
+
+  function stripOuterParens(expr){
+    expr = expr.trim();
+    while (expr.startsWith('(')) {
+      const close = findMatchingParen(expr, 0);
+      if (close !== expr.length - 1) break;
+      expr = expr.slice(1, -1).trim();
+    }
+    return expr;
+  }
+
+  function parseWindowOrder(str){
+    return splitByComma(str).map(part => {
+      part = part.trim();
+      const m = part.match(/^(.*?)(?:\s+(ASC|DESC))$/i);
+      if (m) return { expr: m[1].trim(), dir: m[2].toUpperCase() };
+      return { expr: part, dir: 'ASC' };
+    });
+  }
+
+  function parseOverClause(inner){
+    inner = inner.trim().replace(/\b(ROWS|RANGE)\s+BETWEEN\b[\s\S]*$/i, '').trim();
+    let partitionBy = [];
+    let orderBy = [];
+    const orderIdx = findKeyword(inner, 'ORDER BY');
+    let orderStr = null;
+    let left = inner;
+    if (orderIdx >= 0) {
+      orderStr = inner.slice(orderIdx + 8).trim();
+      left = inner.slice(0, orderIdx).trim();
+    }
+    if (left && /^PARTITION\s+BY\b/i.test(left)) {
+      partitionBy = splitByComma(left.replace(/^PARTITION\s+BY\s+/i, ''));
+    } else if (left) {
+      throw new Error('Не удалось разобрать OVER (...).');
+    }
+    if (orderStr) orderBy = parseWindowOrder(orderStr);
+    return { partitionBy, orderBy };
+  }
+
+  function extractWindowCalls(expr){
+    const found = [];
+    let inQuote = false;
+    for (let i = 0; i < expr.length; i++) {
+      const ch = expr[i];
+      if (ch === "'" && !inQuote) { inQuote = true; continue; }
+      if (ch === "'" && inQuote) {
+        if (expr[i + 1] === "'") { i++; continue; }
+        inQuote = false; continue;
+      }
+      if (inQuote) continue;
+      if ((i === 0 || !isWordChar(expr[i - 1])) &&
+          expr.slice(i, i + 4).toUpperCase() === 'OVER' &&
+          !isWordChar(expr[i + 4] || '')) {
+        let j = i + 4;
+        while (j < expr.length && /\s/.test(expr[j])) j++;
+        if (expr[j] !== '(') continue;
+        const overClose = findMatchingParen(expr, j);
+        if (overClose < 0) continue;
+        let k = i - 1;
+        while (k >= 0 && /\s/.test(expr[k])) k--;
+        if (k < 0 || expr[k] !== ')') continue;
+        const argsClose = k;
+        let depth = 1;
+        k = argsClose - 1;
+        for (; k >= 0; k--) {
+          const c = expr[k];
+          if (c === "'") continue;
+          if (c === ')') depth++;
+          else if (c === '(') {
+            depth--;
+            if (depth === 0) break;
+          }
+        }
+        if (k < 0) continue;
+        const argsOpen = k;
+        k--;
+        while (k >= 0 && /\s/.test(expr[k])) k--;
+        const fnEnd = k;
+        while (k >= 0 && isWordChar(expr[k])) k--;
+        const fnStart = k + 1;
+        const fnName = expr.slice(fnStart, fnEnd + 1).toUpperCase();
+        const argsInner = expr.slice(argsOpen + 1, argsClose);
+        found.push({
+          start: fnStart,
+          end: overClose + 1,
+          name: fnName,
+          args: argsInner.trim() ? splitArgs(argsInner) : [],
+          over: parseOverClause(expr.slice(j + 1, overClose))
+        });
+        i = overClose;
+      }
+    }
+    return found;
+  }
+
+  function rewriteWindowExpr(expr, collector){
+    const wins = extractWindowCalls(expr);
+    if (!wins.length) return expr;
+    let out = expr;
+    for (let i = wins.length - 1; i >= 0; i--) {
+      const w = wins[i];
+      const id = '__w' + collector.length + '__';
+      collector.push(w);
+      out = out.slice(0, w.start) + id + out.slice(w.end);
+    }
+    return out;
+  }
+
+  function compareOrderVals(av, bv){
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (looksLikeDate(av) || looksLikeDate(bv)) {
+      const da = asDate(av), db = asDate(bv);
+      if (da && db) return da.getTime() - db.getTime();
+    }
+    if (typeof av === 'number' && typeof bv === 'number') return av - bv;
+    return String(av).localeCompare(String(bv), 'ru');
+  }
+
+  function compareRowsOrder(rowA, rowB, orderBy){
+    for (const o of orderBy) {
+      const cmp = compareOrderVals(evalExpr(o.expr, rowA, {}), evalExpr(o.expr, rowB, {}));
+      if (cmp !== 0) return o.dir === 'DESC' ? -cmp : cmp;
+    }
+    return 0;
+  }
+
+  function computeWindowValues(rows, spec){
+    const n = rows.length;
+    const result = new Array(n).fill(null);
+    const groups = new Map();
+    rows.forEach((row, idx) => {
+      const key = spec.over.partitionBy.map(c => cellKey(evalExpr(c, row, {}))).join('\0');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(idx);
+    });
+    const fn = spec.name;
+    for (const idxs of groups.values()) {
+      let ordered = idxs.slice();
+      if (spec.over.orderBy.length) {
+        ordered.sort((ia, ib) => compareRowsOrder(rows[ia], rows[ib], spec.over.orderBy));
+      }
+      if (fn === 'SUM' || fn === 'AVG') {
+        const running = spec.over.orderBy.length > 0;
+        if (!running) {
+          let sum = 0, count = 0;
+          for (const i of ordered) {
+            const v = evalExpr(spec.args[0], rows[i], {});
+            if (v != null) { sum += Number(v); count++; }
+          }
+          const val = count ? (fn === 'AVG' ? sum / count : sum) : null;
+          for (const i of ordered) result[i] = val;
+        } else {
+          let sum = 0, count = 0;
+          for (const i of ordered) {
+            const v = evalExpr(spec.args[0], rows[i], {});
+            if (v != null) { sum += Number(v); count++; }
+            result[i] = count ? (fn === 'AVG' ? sum / count : sum) : null;
+          }
+        }
+      } else if (fn === 'RANK') {
+        let rank = 1;
+        for (let k = 0; k < ordered.length; k++) {
+          if (k > 0 && compareRowsOrder(rows[ordered[k]], rows[ordered[k - 1]], spec.over.orderBy) !== 0) {
+            rank = k + 1;
+          }
+          result[ordered[k]] = rank;
+        }
+      } else if (fn === 'LAG' || fn === 'LEAD') {
+        const offset = spec.args.length >= 2 ? Number(evalExpr(spec.args[1], rows[ordered[0]] || {}, {})) : 1;
+        const hasDefault = spec.args.length >= 3;
+        const dir = fn === 'LAG' ? -1 : 1;
+        for (let k = 0; k < ordered.length; k++) {
+          const i = ordered[k];
+          const src = k + dir * offset;
+          if (src >= 0 && src < ordered.length) {
+            result[i] = evalExpr(spec.args[0], rows[ordered[src]], {});
+          } else if (hasDefault) {
+            result[i] = evalExpr(spec.args[2], rows[i], {});
+          } else {
+            result[i] = null;
+          }
+        }
+      } else {
+        throw new Error('Неподдерживаемая оконная функция: ' + fn);
+      }
+    }
+    return result;
+  }
+
+  function splitLinear(expr, ops){
+    const parts = [];
+    let cur = '', depth = 0, inQuote = false, pendingOp = null;
+    for (let i = 0; i < expr.length; i++) {
+      const ch = expr[i];
+      if (ch === "'" && !inQuote) { inQuote = true; cur += ch; continue; }
+      if (ch === "'" && inQuote) {
+        if (expr[i + 1] === "'") { cur += "''"; i++; continue; }
+        inQuote = false; cur += ch; continue;
+      }
+      if (!inQuote) {
+        if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+        else if (depth === 0 && ops.indexOf(ch) >= 0) {
+          const unary = (ch === '+' || ch === '-') && cur.trim() === '';
+          if (!unary) {
+            parts.push({ op: pendingOp, term: cur.trim() });
+            pendingOp = ch;
+            cur = '';
+            continue;
+          }
+        }
+      }
+      cur += ch;
+    }
+    if (!parts.length) return [{ op: null, term: expr }];
+    parts.push({ op: pendingOp, term: cur.trim() });
+    return parts;
+  }
+
+  function applyOp(op, a, b){
+    if (a == null || b == null) return null;
+    if (op === '-' && (looksLikeDate(a) || looksLikeDate(b))) {
+      const da = asDate(a), db = asDate(b);
+      if (da && db && !isNaN(da.getTime()) && !isNaN(db.getTime())) {
+        return (da.getTime() - db.getTime()) / 86400000;
+      }
+    }
+    const na = Number(a), nb = Number(b);
+    if (op === '+') return na + nb;
+    if (op === '-') return na - nb;
+    if (op === '*') return na * nb;
+    if (op === '/') return nb === 0 ? null : na / nb;
+    return null;
+  }
+
+  function evalExpr(expr, row, ctx){
+    expr = stripOuterParens(expr);
+    if (!expr) return null;
+
+    if (/^CASE\b/i.test(expr)) return evalCase(expr, row, ctx);
+
+    const addParts = splitLinear(expr, ['+', '-']);
+    if (addParts.length > 1) {
+      let acc = evalExpr(addParts[0].term, row, ctx);
+      for (let i = 1; i < addParts.length; i++) {
+        acc = applyOp(addParts[i].op, acc, evalExpr(addParts[i].term, row, ctx));
+      }
+      return acc;
+    }
+    const mulParts = splitLinear(expr, ['*', '/']);
+    if (mulParts.length > 1) {
+      let acc = evalExpr(mulParts[0].term, row, ctx);
+      for (let i = 1; i < mulParts.length; i++) {
+        acc = applyOp(mulParts[i].op, acc, evalExpr(mulParts[i].term, row, ctx));
+      }
+      return acc;
+    }
+
+    const call = extractCall(expr);
+    if (call) {
+      if (call.name === 'LAG' || call.name === 'LEAD' || call.name === 'RANK') {
+        throw new Error(call.name + ' используйте вместе с OVER (...).');
+      }
+      const args = call.args.map(a => evalExpr(a, row, ctx));
+      if (call.name === 'NVL') return args[0] == null ? args[1] : args[0];
+      if (call.name === 'NVL2') return args[0] != null ? args[1] : args[2];
+      if (call.name === 'COALESCE') {
+        for (const a of args) if (a != null) return a;
+        return null;
+      }
+      if (call.name === 'DECODE') return evalDecode(args);
+      if (call.name === 'TO_DATE') return oracleToDate(args[0], args[1]);
+      if (call.name === 'TO_CHAR') return oracleToChar(args[0], args[1]);
+      if (call.name === 'TO_NUMBER') return oracleToNumber(args[0], args[1], args[2]);
+      if (call.name === 'ROUND') {
+        if (args[0] == null) return null;
+        const d = args.length > 1 && args[1] != null ? Number(args[1]) : 0;
+        const f = Math.pow(10, d);
+        return Math.round(Number(args[0]) * f + Number.EPSILON) / f;
+      }
+      if (call.name === 'ADD_MONTHS') {
+        const d = asDate(args[0]);
+        if (!d) return null;
+        const r = new Date(d.getTime());
+        r.setMonth(r.getMonth() + Number(args[1]));
+        return r;
+      }
+      if (call.name === 'SUM' || call.name === 'AVG') {
+        if (!ctx.aggregateMode) throw new Error(call.name + ' используйте с OVER (...) либо как агрегат.');
+        return null;
+      }
+      throw new Error('Неизвестная функция: ' + call.name);
+    }
+
+    if (/^SYSDATE$/i.test(expr)) return SYSDATE_VAL;
+
+    const num = expr.match(/^-?\d+(\.\d+)?$/);
+    if (num) return parseFloat(expr);
+
+    if (expr.startsWith("'")) return unquoteStr(expr);
+
+    const col = expr.replace(/["`]/g, '').toLowerCase();
+    if (row && row[col] !== undefined) return row[col];
+    if (row && col.includes('.')) {
+      const bare = col.split('.').pop();
+      if (row[bare] !== undefined) return row[bare];
+    }
+    if (ctx && ctx.columns && ctx.columns.includes(col)) return row ? row[col] : undefined;
+
+    if (expr.includes('||')) {
+      return splitConcat(expr).map(p => {
+        const v = evalExpr(p, row, ctx);
+        return v == null ? '' : String(v);
+      }).join('');
+    }
+
+    throw new Error('Не удалось вычислить выражение: ' + expr);
+  }
+
+  function parseWhereCond(str){
+    const ops = ['>=', '<=', '<>', '!=', '=', '>', '<'];
+    for (const op of ops) {
+      const idx = findOpOutsideQuotes(str, op);
+      if (idx < 0) continue;
+      return {
+        left: str.slice(0, idx).trim(),
+        op: op === '!=' ? '<>' : op,
+        right: str.slice(idx + op.length).trim()
+      };
+    }
+    return null;
+  }
+
+  function findOpOutsideQuotes(str, op){
+    let inQuote = false;
+    for (let i = 0; i <= str.length - op.length; i++) {
+      if (str[i] === "'") {
+        if (inQuote && str[i + 1] === "'") { i++; continue; }
+        inQuote = !inQuote; continue;
+      }
+      if (!inQuote && str.slice(i, i + op.length) === op) return i;
+    }
+    return -1;
+  }
+
+  function compareVals(a, b, op){
+    if (a instanceof Date || b instanceof Date) {
+      const da = asDate(a), db = asDate(b);
+      if (!da || !db) return false;
+      a = da.getTime(); b = db.getTime();
+    } else if (typeof a === 'number' || typeof b === 'number') {
+      a = a == null ? null : Number(a);
+      b = b == null ? null : Number(b);
+    }
+    if (a == null || b == null) {
+      if (op === '=') return a == null && b == null;
+      if (op === '<>') return a != null || b != null;
+      return false;
+    }
+    switch (op) {
+      case '=': return a == b;
+      case '<>': return a != b;
+      case '>': return a > b;
+      case '<': return a < b;
+      case '>=': return a >= b;
+      case '<=': return a <= b;
+      default: return false;
+    }
+  }
+
+  function isAggregateExpr(expr){
+    if (/\bOVER\s*\(/i.test(expr)) return false;
+    return /^\s*SUM\s*\(/i.test(expr);
+  }
+
+  function evalAggregate(name, argExpr, rows, ctx){
+    if (name === 'SUM') {
+      let total = 0;
+      for (const row of rows) {
+        const v = evalExpr(argExpr, row, ctx);
+        if (v != null) total += Number(v);
+      }
+      return total;
+    }
+    return null;
+  }
+
+  function executeSql(dbState, sql){
+    const messages = [];
+    const cleaned = normalizeSql(stripComments(sql));
+    if (!cleaned) {
+      messages.push({ type: 'err', text: 'Пустой запрос. Введите SQL-команду.' });
+      return { ok: false, messages };
+    }
+
+    const stmts = cleaned.split(';').map(s => s.trim()).filter(Boolean);
+    if (stmts.length !== 1) {
+      messages.push({ type: 'err', text: 'Выполните один SELECT-запрос за раз.' });
+      return { ok: false, messages };
+    }
+
+    const stmt = stmts[0];
+    const selectMatch = stmt.match(/^SELECT\s+(DISTINCT\s+)?(.+)\s+FROM\s+(.+)$/i);
+    if (!selectMatch) {
+      messages.push({ type: 'err', text: 'Неподдерживаемая команда. Доступен SELECT с оконными функциями OVER, PARTITION BY, LAG и LEAD.' });
+      return { ok: false, messages };
+    }
+
+    const distinct = !!selectMatch[1];
+    let rest = selectMatch[3].trim();
+    let orderByStr = null;
+    const orderMatch = rest.match(/\s+ORDER\s+BY\s+(.+)$/i);
+    if (orderMatch) {
+      orderByStr = orderMatch[1].trim();
+      rest = rest.slice(0, orderMatch.index).trim();
+    }
+    let whereStr = null;
+    const whereMatch = rest.match(/\s+WHERE\s+(.+)$/i);
+    if (whereMatch) {
+      whereStr = whereMatch[1].trim();
+      rest = rest.slice(0, whereMatch.index).trim();
+    }
+
+    const tableRef = parseTableRef(rest);
+    if (!tableRef) {
+      messages.push({ type: 'err', text: 'Ошибка: не удалось разобрать FROM.' });
+      return { ok: false, messages };
+    }
+
+    let sourceRows;
+    if (tableRef.name === 'dual') {
+      sourceRows = [{}];
+    } else {
+      const table = dbState.tables[tableRef.name];
+      if (!table) {
+        messages.push({ type: 'err', text: 'Ошибка: таблица «' + tableRef.name + '» не найдена.' });
+        return { ok: false, messages };
+      }
+      sourceRows = table.rows.map(r => {
+        const out = {};
+        for (const c of table.columns) out[c.name] = r[c.name];
+        return out;
+      });
+    }
+
+    if (whereStr) {
+      const cond = parseWhereCond(whereStr);
+      if (!cond) {
+        messages.push({ type: 'err', text: 'Ошибка: не удалось разобрать условие WHERE.' });
+        return { ok: false, messages };
+      }
+      try {
+        sourceRows = sourceRows.filter(row => {
+          const lv = evalExpr(cond.left, row, {});
+          const rv = evalExpr(cond.right, row, {});
+          return compareVals(lv, rv, cond.op);
+        });
+      } catch (e) {
+        messages.push({ type: 'err', text: 'Ошибка в WHERE: ' + e.message });
+        return { ok: false, messages };
+      }
+    }
+
+    const items = splitByComma(selectMatch[2]).map(parseSelectItem);
+    if (!items.length) {
+      messages.push({ type: 'err', text: 'Ошибка: укажите столбцы после SELECT.' });
+      return { ok: false, messages };
+    }
+
+    const hasAgg = items.some(it => isAggregateExpr(it.expr));
+    const outCols = [];
+    const projectors = [];
+    let projectRows = sourceRows;
+
+    try {
+      const winCollector = [];
+      const rewrittenItems = items.map(it => ({
+        alias: it.alias,
+        expr: rewriteWindowExpr(it.expr, winCollector)
+      }));
+      const winValues = winCollector.map(w => computeWindowValues(sourceRows, w));
+      projectRows = sourceRows.map((row, ri) => {
+        const copy = {};
+        for (const k of Object.keys(row)) copy[k] = row[k];
+        winValues.forEach((vals, wi) => { copy['__w' + wi + '__'] = vals[ri]; });
+        return copy;
+      });
+
+      if (hasAgg) {
+        const ctx = { aggregateMode: true };
+        for (const it of items) {
+          const agg = extractCall(it.expr);
+          if (agg && agg.name === 'SUM') {
+            const val = evalAggregate('SUM', agg.args[0], sourceRows, ctx);
+            const col = it.alias || 'sum';
+            outCols.push(col);
+            projectors.push(() => val);
+          } else {
+            messages.push({ type: 'err', text: 'С агрегатом SUM используйте только агрегатные выражения.' });
+            return { ok: false, messages };
+          }
+        }
+        projectRows = [{}];
+      } else {
+        for (const it of rewrittenItems) {
+          const col = it.alias;
+          if (!col) {
+            messages.push({ type: 'err', text: 'Укажите alias через AS для выражений: ' + it.expr });
+            return { ok: false, messages };
+          }
+          outCols.push(col);
+          projectors.push(row => evalExpr(it.expr, row, {}));
+        }
+      }
+    } catch (e) {
+      messages.push({ type: 'err', text: 'Ошибка в SELECT: ' + e.message });
+      return { ok: false, messages };
+    }
+
+    let resultRows = projectRows.map(row => {
+      const out = {};
+      outCols.forEach((name, i) => { out[name] = projectors[i](row); });
+      return out;
+    });
+
+    if (orderByStr) {
+      const orderItems = parseOrderBy(orderByStr);
+      if (!orderItems) {
+        messages.push({ type: 'err', text: 'Ошибка: не удалось разобрать ORDER BY.' });
+        return { ok: false, messages };
+      }
+      resultRows = resultRows.slice().sort((a, b) => {
+        for (const o of orderItems) {
+          const av = a[o.col], bv = b[o.col];
+          let cmp = 0;
+          if (av == null && bv == null) cmp = 0;
+          else if (av == null) cmp = 1;
+          else if (bv == null) cmp = -1;
+          else if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
+          else cmp = String(av).localeCompare(String(bv), 'ru');
+          if (cmp !== 0) return o.dir === 'DESC' ? -cmp : cmp;
+        }
+        return 0;
+      });
+    }
+
+    if (distinct) {
+      const seen = new Set();
+      resultRows = resultRows.filter(row => {
+        const key = outCols.map(c => String(row[c])).join('\0');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+
+    const resultSet = { columns: outCols, rows: resultRows };
+    messages.push({ type: 'ok', text: 'Выбрано строк: ' + resultRows.length + '.' });
+    return { ok: true, messages, resultSet };
+  }
+
+  const CLAIM_COLS = [
+    { name: 'claim_id', type: 'INTEGER', pk: true },
+    { name: 'client_id', type: 'INTEGER' },
+    { name: 'claim_amount', type: 'NUMBER' },
+    { name: 'claim_date', type: 'DATE' }
+  ];
+  const POLICY_COLS = [
+    { name: 'policy_id', type: 'INTEGER', pk: true },
+    { name: 'region', type: 'VARCHAR2(50)' },
+    { name: 'policy_type', type: 'VARCHAR2(20)' },
+    { name: 'client_id', type: 'INTEGER' },
+    { name: 'premium_amount', type: 'NUMBER' },
+    { name: 'policy_status', type: 'VARCHAR2(20)' }
+  ];
+  const RISK_COLS = [
+    { name: 'client_id', type: 'INTEGER' },
+    { name: 'assessment_date', type: 'DATE' },
+    { name: 'risk_score', type: 'NUMBER' },
+    { name: 'claim_frequency', type: 'NUMBER' }
+  ];
+  const PAYMENT_COLS = [
+    { name: 'client_id', type: 'INTEGER' },
+    { name: 'payment_date', type: 'DATE' },
+    { name: 'payment_amount', type: 'NUMBER' },
+    { name: 'policy_id', type: 'INTEGER' }
+  ];
+  const CLAIMS = [
+    { claim_id: 1, client_id: 101, claim_amount: 10000, claim_date: '2024-02-01' },
+    { claim_id: 2, client_id: 102, claim_amount: 30000, claim_date: '2024-03-15' },
+    { claim_id: 3, client_id: 101, claim_amount: 60000, claim_date: '2023-11-20' },
+    { claim_id: 4, client_id: 103, claim_amount: 10000, claim_date: '2024-06-01' }
+  ];
+  const POLICIES = [
+    { policy_id: 1, region: 'Москва', policy_type: 'КАСКО', client_id: 101, premium_amount: 50000, policy_status: 'ACTIVE' },
+    { policy_id: 2, region: 'Москва', policy_type: 'ОСАГО', client_id: 102, premium_amount: 8000, policy_status: 'ACTIVE' },
+    { policy_id: 3, region: 'Москва', policy_type: 'КАСКО', client_id: 103, premium_amount: 40000, policy_status: 'ACTIVE' },
+    { policy_id: 4, region: 'СПб', policy_type: 'КАСКО', client_id: 104, premium_amount: 35000, policy_status: 'ACTIVE' },
+    { policy_id: 5, region: 'СПб', policy_type: 'КАСКО', client_id: 105, premium_amount: 45000, policy_status: 'ACTIVE' },
+    { policy_id: 6, region: 'Москва', policy_type: 'ОСАГО', client_id: 106, premium_amount: 12000, policy_status: 'EXPIRED' }
+  ];
+  const RISKS = [
+    { client_id: 101, assessment_date: '2024-01-10', risk_score: 20, claim_frequency: 0 },
+    { client_id: 101, assessment_date: '2024-04-10', risk_score: 35, claim_frequency: 1 },
+    { client_id: 101, assessment_date: '2024-07-10', risk_score: 50, claim_frequency: 2 },
+    { client_id: 102, assessment_date: '2024-02-01', risk_score: 40, claim_frequency: 1 },
+    { client_id: 102, assessment_date: '2024-05-01', risk_score: 38, claim_frequency: 1 }
+  ];
+  const PAYMENTS = [
+    { client_id: 101, payment_date: '2024-01-15', payment_amount: 10000, policy_id: 1 },
+    { client_id: 101, payment_date: '2024-02-15', payment_amount: 10000, policy_id: 1 },
+    { client_id: 101, payment_date: '2024-04-20', payment_amount: 12000, policy_id: 1 },
+    { client_id: 102, payment_date: '2024-03-01', payment_amount: 5000, policy_id: 2 }
+  ];
+
+  function makeClaimsDb(){
+    return {
+      tables: {
+        insurance_claims: { columns: CLAIM_COLS.map(c => ({ ...c })), rows: CLAIMS.map(r => ({ ...r })) }
+      }
+    };
+  }
+  function makePoliciesDb(){
+    return {
+      tables: {
+        insurance_policies: { columns: POLICY_COLS.map(c => ({ ...c })), rows: POLICIES.map(r => ({ ...r })) }
+      }
+    };
+  }
+  function makeRisksDb(){
+    return {
+      tables: {
+        client_risk_assessments: { columns: RISK_COLS.map(c => ({ ...c })), rows: RISKS.map(r => ({ ...r })) }
+      }
+    };
+  }
+  function makePaymentsDb(){
+    return {
+      tables: {
+        insurance_payments: { columns: PAYMENT_COLS.map(c => ({ ...c })), rows: PAYMENTS.map(r => ({ ...r })) }
+      }
+    };
+  }
+
+  function sameVal(a, b){
+    if (a == null && b == null) return true;
+    if (a == null || b == null) return false;
+    if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 0.001;
+    return a === b || String(a) === String(b);
+  }
+
+  function cellKey(v){
+    return v == null ? '\0NULL\0' : String(v);
+  }
+
+  function matchResult(resultSet, expected, opts){
+    if (!resultSet) return { pass: false, hint: 'Выполните SELECT-запрос.' };
+    const cols = resultSet.columns.map(c => c.toLowerCase());
+    const expCols = expected.columns.map(c => c.toLowerCase());
+    if (cols.length !== expCols.length || cols.some((c, i) => c !== expCols[i])) {
+      return { pass: false, hint: 'Ожидаемые столбцы: ' + expected.columns.join(', ') + '.' };
+    }
+    if (resultSet.rows.length !== expected.rows.length) {
+      return { pass: false, hint: 'Ожидается строк: ' + expected.rows.length + ', получено: ' + resultSet.rows.length + '.' };
+    }
+    const ordered = !opts || opts.ordered !== false;
+    if (ordered) {
+      for (let i = 0; i < expected.rows.length; i++) {
+        for (let j = 0; j < expCols.length; j++) {
+          if (!sameVal(resultSet.rows[i][resultSet.columns[j]], expected.rows[i][j])) {
+            return { pass: false, hint: opts && opts.hint ? opts.hint : 'Результат не совпадает с ожидаемым. Проверьте тип JOIN и условие.' };
+          }
+        }
+      }
+    } else {
+      const keyOf = row => expCols.map((_, j) => cellKey(row[resultSet.columns[j]])).join('\0');
+      const got = resultSet.rows.map(keyOf).sort();
+      const exp = expected.rows.map(r => r.map(cellKey).join('\0')).sort();
+      if (got.some((k, i) => k !== exp[i])) {
+        return { pass: false, hint: opts && opts.hint ? opts.hint : 'Набор строк не совпадает с ожидаемым.' };
+      }
+    }
+    return { pass: true };
+  }
+
+  const OVER_ROWS = [
+    [1, 101, 10000, 50000, 20],
+    [2, 102, 30000, 50000, 60],
+    [4, 103, 10000, 50000, 20]
+  ];
+  const PART_ROWS = [
+    ['Москва', 'КАСКО', 101, 50000, (50000 + 8000 + 40000) / 3, 1, 51.02],
+    ['Москва', 'КАСКО', 103, 40000, (50000 + 8000 + 40000) / 3, 2, 91.84],
+    ['Москва', 'ОСАГО', 102, 8000, (50000 + 8000 + 40000) / 3, 1, 100],
+    ['СПб', 'КАСКО', 105, 45000, 40000, 1, 56.25],
+    ['СПб', 'КАСКО', 104, 35000, 40000, 2, 100]
+  ];
+  const LAG_ROWS = [
+    [101, '2024-01-10', 20, null, 0, 'Стабильный'],
+    [101, '2024-04-10', 35, 20, 15, 'Стабильный'],
+    [101, '2024-07-10', 50, 35, 15, 'Растущий риск ⚠️'],
+    [102, '2024-02-01', 40, null, 0, 'Стабильный'],
+    [102, '2024-05-01', 38, 40, -2, 'Стабильный']
+  ];
+  const LEAD_ROWS = [
+    [101, '2024-01-15', 10000, 1, '2024-02-15', 10000, 'Регулярные платежи', 0],
+    [101, '2024-02-15', 10000, 1, '2024-04-20', 12000, 'Большой разрыв - возможны проблемы', 20],
+    [101, '2024-04-20', 12000, 1, null, null, 'Последний платеж - риск оттока!', 0],
+    [102, '2024-03-01', 5000, 2, null, null, 'Последний платеж - риск оттока!', 0]
+  ];
+
+  const TASKS = [
+    {
+      id: 'over',
+      label: 'OVER',
+      text: 'В таблице <b>insurance_claims</b> посчитайте долю каждой выплаты. Выведите <b>claim_id</b>, <b>client_id</b>, <b>claim_amount</b>, общую сумму всех выплат <b>total_all_claims</b> через <b>SUM(...) OVER ()</b> и долю в процентах <b>percent_of_total</b> (округлите до 2 знаков). Учитывайте только выплаты с <b>claim_date &gt;= \'2024-01-01\'</b>. Отсортируйте по <b>claim_id</b>.',
+      initDb: () => makeClaimsDb(),
+      check(dbState, result){
+        return matchResult(result && result.resultSet, {
+          columns: ['claim_id', 'client_id', 'claim_amount', 'total_all_claims', 'percent_of_total'],
+          rows: OVER_ROWS
+        }, { ordered: true, hint: 'SUM(claim_amount) OVER () AS total_all_claims и ROUND(claim_amount * 100.0 / SUM(claim_amount) OVER (), 2)' });
+      }
+    },
+    {
+      id: 'partition',
+      label: 'PARTITION BY',
+      text: 'По активным полисам (<b>policy_status = \'ACTIVE\'</b>) из <b>insurance_policies</b> выведите <b>region</b>, <b>policy_type</b>, <b>client_id</b>, <b>premium_amount</b>, среднюю премию по региону <b>avg_regional_premium</b>, ранг премии внутри типа полиса в регионе <b>premium_rank</b> (по убыванию суммы) и накопительный процент <b>cumulative_percent</b> в регионе (округление до 2 знаков). Отсортируйте по <b>region</b>, затем по <b>premium_amount</b> по убыванию.',
+      initDb: () => makePoliciesDb(),
+      check(dbState, result){
+        return matchResult(result && result.resultSet, {
+          columns: ['region', 'policy_type', 'client_id', 'premium_amount', 'avg_regional_premium', 'premium_rank', 'cumulative_percent'],
+          rows: PART_ROWS
+        }, { ordered: true, hint: 'AVG(...) OVER (PARTITION BY region), RANK() OVER (PARTITION BY region, policy_type ORDER BY premium_amount DESC)' });
+      }
+    },
+    {
+      id: 'lag',
+      label: 'LAG',
+      text: 'По таблице <b>client_risk_assessments</b> выведите <b>client_id</b>, <b>assessment_date</b>, <b>risk_score</b>, предыдущий балл <b>prev_risk_score</b>, изменение <b>risk_change</b> (для первой оценки — 0) и тренд <b>risk_trend</b>: «Растущий риск ⚠️», если балл растёт два периода подряд, иначе «Стабильный». Разбивка по клиенту, сортировка по дате. Отсортируйте результат по <b>client_id</b>, <b>assessment_date</b>.',
+      initDb: () => makeRisksDb(),
+      check(dbState, result){
+        return matchResult(result && result.resultSet, {
+          columns: ['client_id', 'assessment_date', 'risk_score', 'prev_risk_score', 'risk_change', 'risk_trend'],
+          rows: LAG_ROWS
+        }, { ordered: true, hint: 'LAG(risk_score, 1) OVER (PARTITION BY client_id ORDER BY assessment_date) и LAG(..., 1, risk_score) для risk_change' });
+      }
+    },
+    {
+      id: 'lead',
+      label: 'LEAD',
+      text: 'По платежам из <b>insurance_payments</b> за последние 12 месяцев выведите <b>client_id</b>, <b>payment_date</b>, <b>payment_amount</b>, <b>policy_id</b>, дату и сумму следующего платежа <b>next_payment</b> и <b>next_amount</b>, шаблон <b>payment_pattern</b> («Последний платеж - риск оттока!», если следующего нет; «Большой разрыв - возможны проблемы», если разрыв больше 40 дней; иначе «Регулярные платежи») и изменение суммы <b>next_payment_change_pct</b> в процентах (округление до 2 знаков). Отсортируйте по <b>client_id</b>, <b>payment_date</b>.',
+      initDb: () => makePaymentsDb(),
+      check(dbState, result){
+        return matchResult(result && result.resultSet, {
+          columns: ['client_id', 'payment_date', 'payment_amount', 'policy_id', 'next_payment', 'next_amount', 'payment_pattern', 'next_payment_change_pct'],
+          rows: LEAD_ROWS
+        }, { ordered: true, hint: 'LEAD(payment_date, 1) OVER (PARTITION BY client_id ORDER BY payment_date) и CASE по следующему платежу' });
+      }
+    }
+  ];
+
+  const COMPLETE_TEXT = 'Все задания выполнены! Вы освоили оконные функции OVER, PARTITION BY, LAG и LEAD.';
+
+  taskTotal.textContent = String(TASKS.length);
+
+  function updateLineNums(){
+    const lines = sqlInput.value.split('\n').length || 1;
+    lineNums.textContent = Array.from({ length: lines }, (_, i) => i + 1).join('\n');
+  }
+
+  function formatCell(v){
+    if (v == null) return '';
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      return v.getFullYear() + '-' + pad2(v.getMonth() + 1) + '-' + pad2(v.getDate());
+    }
+    return String(v);
+  }
+
+  function renderResultTable(resultSet){
+    if (!resultSet || !resultSet.columns.length) return '';
+    const ths = resultSet.columns.map(c => '<th>' + escapeHtml(c) + '</th>').join('');
+    const trs = resultSet.rows.length
+      ? resultSet.rows.map(row => {
+          const tds = resultSet.columns.map(c => '<td>' + escapeHtml(formatCell(row[c])) + '</td>').join('');
+          return '<tr>' + tds + '</tr>';
+        }).join('')
+      : '<tr><td colspan="' + resultSet.columns.length + '" style="color:#64748b;font-style:italic">Нет строк</td></tr>';
+    return '<table class="data-table"><thead><tr>' + ths + '</tr></thead><tbody>' + trs + '</tbody></table>';
+  }
+
+  function renderOutput(messages, checkResult, resultSet){
+    if (!messages.length && !checkResult && !resultSet) {
+      outputBody.innerHTML = '<p class="output-empty">Нажмите «Выполнить», чтобы запустить запрос и увидеть результат проверки.</p>';
+      return;
+    }
+    let html = '';
+    for (const m of messages) {
+      html += '<p class="msg msg-' + m.type + '">' + escapeHtml(m.text) + '</p>';
+    }
+    if (resultSet) html += renderResultTable(resultSet);
+    if (checkResult) {
+      if (checkResult.pass) {
+        html += '<p class="msg msg-ok">✓ Задание выполнено верно!</p>';
+      } else if (checkResult.hint) {
+        html += '<p class="msg msg-info">Подсказка: ' + escapeHtml(checkResult.hint) + '</p>';
+      }
+    }
+    outputBody.innerHTML = html;
+  }
+
+  function renderSchema(){
+    const names = Object.keys(db.tables).sort();
+    if (!names.length) {
+      schemaBody.innerHTML = '<p class="output-empty">Нет данных.</p>';
+      return;
+    }
+    schemaBody.innerHTML = names.map(name => {
+      const table = db.tables[name];
+      const cols = table.columns;
+      const lis = cols.map(c => {
+        let badges = '';
+        if (c.pk) badges += '<span class="col-pk">PK</span>';
+        return '<li><span class="col-name">' + escapeHtml(c.name) + '</span><span class="col-type">' + escapeHtml(c.type) + '</span>' + badges + '</li>';
+      }).join('');
+      let dataHtml = '';
+      if (!table.rows.length) {
+        dataHtml = '<p class="data-empty">Нет строк</p>';
+      } else {
+        const ths = cols.map(c => '<th>' + escapeHtml(c.name) + '</th>').join('');
+        const trs = table.rows.map(row => {
+          const tds = cols.map(c => '<td>' + escapeHtml(row[c.name] == null ? '' : row[c.name]) + '</td>').join('');
+          return '<tr>' + tds + '</tr>';
+        }).join('');
+        dataHtml = '<table class="data-table"><thead><tr>' + ths + '</tr></thead><tbody>' + trs + '</tbody></table>';
+      }
+      return '<div class="schema-table"><div class="schema-table-name">' + escapeHtml(name) + '</div><ul class="schema-cols">' + lis + '</ul>' + dataHtml + '</div>';
+    }).join('');
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function showToast(text){
+    toast.textContent = text;
+    toast.classList.add('visible');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('visible'), 2800);
+  }
+
+  function initTask(step){
+    const task = TASKS[step];
+    if (!task) return;
+    db = task.initDb ? task.initDb(db) : { tables: {} };
+    sqlInput.value = '';
+    updateLineNums();
+    renderSchema();
+    renderOutput([], null);
+  }
+
+  function updateBanner(){
+    taskCard.classList.remove('success');
+    if (taskStep >= TASKS.length) {
+      taskLabel.textContent = 'Готово';
+      taskText.innerHTML = COMPLETE_TEXT;
+      taskCard.classList.add('success');
+      taskNum.textContent = String(TASKS.length);
+      return;
+    }
+    const t = TASKS[taskStep];
+    taskLabel.textContent = t.label;
+    taskText.innerHTML = t.text;
+    taskNum.textContent = String(taskStep + 1);
+  }
+
+  function runQuery(){
+    if (taskStep >= TASKS.length) return;
+    const task = TASKS[taskStep];
+    const snapshot = cloneDb(db);
+    const result = executeSql(db, sqlInput.value);
+    renderSchema();
+
+    let checkResult = null;
+    if (result.ok) {
+      checkResult = task.check(db, result);
+      if (checkResult.pass) {
+        taskStep++;
+        updateBanner();
+        if (taskStep >= TASKS.length) {
+          renderOutput(result.messages, checkResult, result.resultSet);
+          modalComplete.classList.add('visible');
+          return;
+        }
+        showToast('Задание выполнено — переходите к следующему.');
+        initTask(taskStep);
+        renderOutput(result.messages, checkResult, result.resultSet);
+        return;
+      }
+      db = snapshot;
+      renderSchema();
+    }
+
+    renderOutput(result.messages, checkResult, result.resultSet);
+  }
+
+  function clearEditor(){
+    if (taskStep >= TASKS.length) return;
+    sqlInput.value = '';
+    updateLineNums();
+  }
+
+  function restartAll(){
+    taskStep = 0;
+    modalComplete.classList.remove('visible');
+    updateBanner();
+    initTask(0);
+  }
+
+  sqlInput.addEventListener('input', updateLineNums);
+  sqlInput.addEventListener('scroll', () => { lineNums.scrollTop = sqlInput.scrollTop; });
+  sqlInput.addEventListener('keydown', e => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const start = sqlInput.selectionStart;
+      sqlInput.value = sqlInput.value.slice(0, start) + '  ' + sqlInput.value.slice(sqlInput.selectionEnd);
+      sqlInput.selectionStart = sqlInput.selectionEnd = start + 2;
+      updateLineNums();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      runQuery();
+    }
+  });
+
+  btnRun.addEventListener('click', runQuery);
+  btnReset.addEventListener('click', clearEditor);
+  btnRestart.addEventListener('click', restartAll);
+  modalComplete.addEventListener('click', e => {
+    if (e.target === modalComplete) modalComplete.classList.remove('visible');
+  });
+
+  updateBanner();
+  initTask(0);
+})();
+</script>
+</body>
+</html>
